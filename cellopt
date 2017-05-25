@@ -1,0 +1,230 @@
+#!/usr/bin/env python
+'''
+########################################################################################################################
+generation serials POSCAR
+*_mib.vasp put Graphene at the middle of the cell
+*_resize.vasp adjust the size of the cell
+*_refelect.vasp generate the top layer of the substrate
+*_infinite.vasp generate the largest cells
+put_mid==>generate_refelect==>adjust_sizes==>enlarge_z_to_infinite.
+Powered by Amsera 23/MAY/2017
+########################################################################################################################
+'''
+import sys
+from copy import deepcopy
+from linecache import getlines as readposcar
+
+class atom:
+    def __init__(self,tag,content_line):
+        self.raw_line = content_line.strip("\n").strip()
+        self.sort = tag
+        self.readloc()
+        pass
+    def readloc(self):
+        line = self.raw_line
+        line_seprate = line.split()
+        if len(line_seprate) > 3:
+            self.add = "  ".join(line_seprate[-3:])
+            self.loc = [ float(item) for item in line_seprate[:3] ]
+        else:
+            self.loc = [ float(item) for item in line_seprate ]
+            pass
+        pass
+    def __str__(self):
+        loc_str = "  %.16f  %.16f  %.16f "%(tuple(self.loc))
+        add_str = self.add
+        return loc_str+add_str
+    pass
+class cell:
+    def __init__(self,celltitle,vectinfo,isselect,element_line,number_line,atoms):
+        def split_line(line,item_type="nub"):
+            if item_type == "str":
+                return [ str(item) for item in line.strip('\n').strip().split()]
+            else:
+                return [ int(item) for item in line.strip('\n').strip().split()]
+                pass
+            pass
+        self.title = celltitle.strip('\n').strip()
+        self.cellscale = "1.0"
+        self.elements = split_line(element_line,"str")
+        self.numbers  = split_line(number_line)
+        def gen_atom_sorts(sort_list, curent_nub):
+            sort_list.append(sort_list[-1]+curent_nub)
+            return sort_list
+        self.sorts = reduce(gen_atom_sorts,self.numbers,[0])
+        self.atoms_sorts = {}
+        self.atoms = {}
+        self.sort_atom(atoms)
+        self.neo_atom = {}
+        self.isselect = isselect
+        self.vect = [[float(item) for item in line.strip('\n').strip().split() ] for line in vectinfo]
+        pass
+    def sort_atom(self,atoms):
+        for index, item in enumerate(self.elements):
+            self.atoms_sorts[str(item)] = range(self.sorts[index],self.sorts[index+1])
+            pass
+        for index, item in enumerate(atoms):
+            for key,value in self.atoms_sorts.items():
+                if index in value:
+                    atom_object = atom(key,item)
+                    if not self.atoms.has_key(str(key)):
+                        self.atoms[str(key)] = []
+                        pass
+                    self.atoms[str(key)].append(atom_object)
+                    pass
+                pass
+            pass
+        self.neo_atoms = deepcopy(self.atoms)
+        pass
+    def gen_neo(self,change_elements):
+        self.neo_atoms = deepcopy(self.atoms)
+        def seekz(curzs):
+            total_atoms = []
+            for key, value in curzs.items():
+                if key in change_elements:
+                    total_atoms.extend(value)
+                    pass
+                pass
+            maxz = 0.0
+            for iz in total_atoms:
+               if maxz <= iz.loc[-1]:
+                   maxz = iz.loc[-1]
+                   pass
+               pass
+            return maxz
+        maxz = seekz(self.neo_atoms)
+        for ele in change_elements:
+            self.numbers[self.elements.index(ele)] = 2 * self.numbers[self.elements.index(ele)]
+            pass
+        for key, value in self.neo_atoms.items():
+            if key in change_elements:
+                neo_value = []
+                for item in value:
+                    #dz = 1.0 - maxz
+                    neo_value.append(item)
+                    neo_item = deepcopy(item)
+                    #neo_item.loc[-1] = dz + neo_item.loc[-1]
+                    neo_item.loc[-1] = 1.0 - neo_item.loc[-1]
+                    neo_value.append(neo_item)
+                    pass
+                self.neo_atoms[key] = neo_value
+                pass
+            pass
+        pass
+    def movz(self,neoz):
+        obseletz = self.vect[-1][-1]
+        self.vect[-1][-1] = float(neoz)
+        for key, value in self.neo_atoms.items():
+            for item in value:
+                item.loc[-1] = float(item.loc[-1] * obseletz )/neoz
+                pass
+            pass
+        pass
+    def put_mid(self,put_atoms):
+        def seekz(curzs):
+            minz = 1.0
+            maxz = 0.0
+            for iz in curzs:
+               if not minz < iz.loc[-1]:
+                   minz = iz.loc[-1]
+                   pass
+               if not maxz > iz.loc[-1]:
+                   maxz = iz.loc[-1]
+               pass
+            return minz,float(maxz-minz)
+        for key, value in self.neo_atoms.items():
+            minz, dz = seekz(value)
+            if key in put_atoms:
+                for item in value:
+                    item.loc[-1] = item.loc[-1] - minz + 0.5 - 0.5 * dz
+                    pass
+                pass
+            pass
+        pass
+    def __str__(self):
+        title = "%s \n"%(self.title)
+        scale = "   %s \n"%(self.cellscale)
+        vects = ["    %.16f  %.16f  %.16f"%(tuple(line)) for line in self.vect]
+        vectinfo = "\n".join(vects) + "\n"
+        #elmts = "    %s    %s    %s \n"%(tuple(self.elements))
+        elmts = "    "+ "    ".join(self.elements)+"\n"
+        numbs = "    "+ "    ".join([str(item) for item in self.numbers])+"\n"
+        #numbs = "    %i    %i    %i \n"%(tuple(self.numbers))
+        if self.isselect :
+            Meths = "Select\nDirect \n"
+        else:
+            Meths = "Direct \n"
+            pass
+        locts = []
+        for ele in self.elements :
+            atoms = self.neo_atoms.get(ele)
+            for item in atoms:
+                locts.append(str(item))
+                pass
+            pass
+        locts = "\n".join(locts)
+        total_content = title + scale + vectinfo + elmts + numbs + Meths + locts
+        return total_content
+    pass
+def read_file(file_name):
+    content = readposcar(file_name)
+    if "D" == content[7][0:0]:
+        cell_object = cell(content[0],content[2:5],False,content[5],content[6],content[8:])
+    else:
+        cell_object = cell(content[0],content[2:5],True,content[5],content[6],content[9:])
+        pass
+    return cell_object
+    pass
+def refelect(cell,change_elements=["Si",'O']):
+    #cell.gen_neo(["Si","O"])
+    cell.gen_neo(change_elements)
+    pass
+def middlize(cell,change_elements=["C"]):
+    #cell.gen_neo(["Si","O"])
+    cell.put_mid(change_elements)
+    pass
+def make_infinite(file_name='resize.vasp'):
+    cell = read_file(file_name)
+    cell.movz(float(97.216))
+    file_name = file_name.split('_')[0] + "_infinite.vasp"
+    print >> file_name, str(cell)
+    pass
+def make_total(file_name="mid.vasp"):
+    cell = read_file(file_name)
+    refelect(cell)
+    file_obj_ref = open(file_name.split('_')[0]+"_refelect.vasp",'w')
+    print >> file_obj_ref, str(cell)
+    pass
+def make_mid(file_name):
+    cell = read_file(file_name)
+    middlize(cell)
+    file_obj_mid = open(file_name.split('_')[0]+"_mid.vasp",'w')
+    print >> file_obj_mid, str(cell)
+    file_obj_mid.close()
+    make_total(file_name.split('_')[0]+"_mid.vasp")
+    pass
+def frange(ll,ul,step_length):
+    return [float(ll)+float(i)*float(step_length) for i in range(int(abs(ul-ll)/float(step_length)))]
+def resize_cell(cell,size_range):
+    cell_sizes = frange(*size_range)
+    def gen_serial_cell(cell_size):
+        cell.movz(cell_size)
+        file_obj_cur = open(str(cell_size)+'_resize.vasp','w')
+        print >> file_obj_cur, str(cell)
+        file_obj_cur.close()
+        make_mid(str(cell_size)+"_resize.vasp")
+        make_infinite(str(cell_size) + "_resize.vasp")
+        pass
+    map(gen_serial_cell,cell_sizes)
+    pass
+def make_serial(size_range,file_name='HALF'):
+    cell = read_file(file_name)
+    resize_cell(cell,size_range)
+    pass
+if __name__=="__main__":
+    size_range = [6.076,10.322,0.6076]
+    if len(sys.argv) > 3:
+        size_range = [ float(item) for item in sys.argv[-3:] ]
+        pass
+    make_serial(size_range)
+    pass
