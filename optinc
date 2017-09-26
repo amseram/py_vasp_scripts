@@ -1,0 +1,145 @@
+#!/usr/bin/env python
+from linecache import getlines as rd
+
+class chk:
+    def __init__(self,file_name):
+        self.raw = [ item.strip().split('=') for item in  rd(file_name)]
+        self.raw_dic = {}
+        for item in self.raw:
+            if len(item) > 1:
+                self.raw_dic[str(item[0]).strip()] = str(item[-1])
+                pass
+        self.con = self.raw_dic
+        pass
+    def rgincar(self,z_size):
+        self.z = float(z_size)
+        if self.z < 12.0 :
+            self.k = 0.090
+            self.vdwk  = "16 16 2"
+        elif  self.z < 18.0 :
+            self.k = 0.060
+            self.vdwk  = "24 24 3"
+        else : 
+            self.k = 0.050
+            self.vdwk =  "26 26 3"
+            pass
+        self.con['KSPACING'] = "%.4f"%(self.k)
+        self.con['LVDW_MBD_SIZE'] = self.vdwk
+        pass
+    def __str__(self):
+        tmplst = [ str(key)+" = "+str(val) for key, val in self.con.iteritems()]
+        return "\n".join(tmplst)
+    pass
+
+class fixed:
+    def __init__(self,file_name):
+        self.raw = [ item.strip().split('=') for item in  rd(file_name)]
+        self.raw_dic = {}
+        for item in self.raw:
+            if len(item) > 1:
+                self.raw_dic[str(item[0]).strip()] = str(item[-1])
+                pass
+        self.con = self.raw_dic
+        pass
+    def rgincar(self,level):
+        self.l = int(level)
+        if self.l == 1 :
+            self.k = 0.090
+            self.vdwk  = "16 16 2"
+        elif self.l == 0:
+            self.k = 0.180
+            self.vdwk = "8 8 1"
+        elif  self.l == 2 :
+            self.k = 0.060
+            self.vdwk  = "24 24 3"
+        else : 
+            self.k = 0.050
+            self.vdwk =  "26 26 3"
+            pass
+        self.con['KSPACING'] = "%.4f"%(self.k)
+        self.con['LVDW_MBD_SIZE'] = self.vdwk
+        pass
+    def __str__(self):
+        tmplst = [ str(key)+" = "+str(val) for key, val in self.con.iteritems()]
+        return "\n".join(tmplst)
+    pass    
+
+class inc:
+    def __init__(self,file_name):
+        self.raw = [ item.strip().split('=') for item in  rd(file_name)]
+        self.raw_dic = {}
+        for item in self.raw:
+            if len(item) > 1:
+                self.raw_dic[str(item[0]).strip()] = str(item[-1].strip())
+                pass
+        self.con = self.raw_dic
+        pass
+    def genincars(self):
+        self.mdic = {
+                're':[202,202],
+                'hi':[212,212],
+                't0':[212,0],
+                't1':[212,1],
+                't2':[212,2],
+                'r0':[202,0],
+                'r1':[202,1],
+                'r2':[202,2],
+                'rt':[263,263],
+                'n' :[212,212,"12 12 1"],
+                'h' :[212,212,"24 24 1"],
+                'u' :[212,212,"36 36 1"],
+                'nz':[212,212,700,1400],
+                'hz':[212,212,800,1600],
+                'uz':[212,212,900,1800]
+                }
+        for k,v in self.mdic.iteritems():
+            #self.con['LVDW_ONECELL'] = 'F F T'
+            if v[0] == v[-1]:
+                self.delit()
+                #if v[0] == 263:
+                    #self.con['LVDW_ONECELL'] = 'T T T'
+                    #pass
+            else:
+                if len(v) < 3:
+                    self.setit(str(v[-1]))
+                elif len(v) == 3:
+                    self.setvdwk(str(v[-1]))
+                elif len(v) == 4:
+                    self.setngz(str(v[2]),str(v[3]))
+                    pass
+                pass
+            self.con['IVDW'] = str(v[0])
+            fobj = open('INCAR_'
+                    +str(k),'w')
+            print >>fobj, str(self)
+            fobj.close()
+            pass
+        pass
+    def delit(self):
+        if self.con.has_key('ITIM'):
+            del self.con['ITIM']
+            pass
+        pass
+    def setvdwk(self,kval):
+        self.con['VDW_MBD_SIZE'] = kval
+        pass
+    def setngz(self,ngz,ngzf):
+        self.con['NGZ'] = ngz
+        self.con['NGZF']= ngzf
+        pass
+    def setit(self,itim):
+        self.con['ITIM'] = itim
+        pass
+    def __str__(self):
+        tmplst = [ str(key)+" = "+str(val) for key, val in self.con.iteritems()]
+        return "\n".join(tmplst)
+    pass    
+
+def main():
+    incarobj = inc('./INCAR')
+    incarobj.genincars()
+    pass
+
+if __name__=='__main__':
+    main()
+    pass
