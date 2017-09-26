@@ -24,7 +24,7 @@ class chk:
             self.vdwk =  "26 26 3"
             pass
         self.con['KSPACING'] = "%.4f"%(self.k)
-        self.con['LVDW_MBD_SIZE'] = self.vdwk
+        self.con['VDW_MBD_SIZE'] = self.vdwk
         pass
     def __str__(self):
         tmplst = [ str(key)+" = "+str(val) for key, val in self.con.iteritems()]
